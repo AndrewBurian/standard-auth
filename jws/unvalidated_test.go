@@ -1,6 +1,7 @@
 package jws
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"testing"
@@ -8,10 +9,11 @@ import (
 
 func Test_parseJwsAnyEncoding(t *testing.T) {
 	tests := []struct {
-		name    string
-		input   []byte
-		want    *signedJws
-		wantErr bool
+		name      string
+		input     []byte
+		want      *signedJws
+		wantErr   bool
+		wantErrIs error
 	}{
 		{
 			// sample from RFC 7515 § 3.3: Example JWS.
@@ -294,6 +296,12 @@ func Test_parseJwsAnyEncoding(t *testing.T) {
 				return
 			}
 			if err != nil && tt.wantErr {
+				if tt.wantErrIs == nil {
+					return
+				}
+				if !errors.Is(err, tt.wantErrIs) {
+					t.Errorf("Expected error to be %v, was %v", tt.wantErrIs, err)
+				}
 				return
 			}
 			if compError := compareJws(got, tt.want); compError != nil {

@@ -9,6 +9,10 @@ import (
 	"unicode"
 )
 
+var (
+	ErrInvalidCompactEncoding = errors.New("unable to parse input as JWS compact encoding")
+)
+
 type UnverifiedJws interface {
 	GetSignatures() []*signedJwsSignature
 	GetPayload() []byte

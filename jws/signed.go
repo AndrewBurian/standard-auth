@@ -2,7 +2,12 @@ package jws
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+)
+
+var (
+	ErrTooManySignatures = errors.New("cannot have more that 1 signature for compact encoding")
 )
 
 // SignedJws is a JWS ready to be sent
