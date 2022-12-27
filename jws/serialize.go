@@ -18,7 +18,7 @@ var (
 
 // CompactEncode returns a URL safe string representing the JWS in Compact format
 // as described in RFC 7515 § 7.1
-func (jws *signedJws) CompactEncode() (string, error) {
+func (jws *deprecatedSignedJws) CompactEncode() (string, error) {
 
 	// Cannot encode mulitple signatures
 	if jws.Signatures != nil {
@@ -46,13 +46,13 @@ func (jws *signedJws) CompactEncode() (string, error) {
 	return fmt.Sprintf("%s.%s.%s", header, payload, signature), nil
 }
 
-func compactDecode(s string) (*signedJws, error) {
+func compactDecode(s string) (*deprecatedSignedJws, error) {
 	parts := strings.Split(s, ".")
 	if len(parts) != 3 {
 		return nil, ErrInvalidCompactEncoding
 	}
 
-	jws := &signedJws{}
+	jws := &deprecatedSignedJws{}
 
 	if err := jws.Protected.UnmarshalText([]byte(parts[0])); err != nil {
 		return nil, ErrInvalidCompactEncoding
@@ -69,19 +69,19 @@ func compactDecode(s string) (*signedJws, error) {
 	return jws, nil
 }
 
-func (jws *signedJws) JSONEncode() ([]byte, error) {
+func (jws *deprecatedSignedJws) JSONEncode() ([]byte, error) {
 	return json.Marshal(jws)
 }
 
-func jsonDecode(b []byte) (*signedJws, error) {
-	jws := &signedJws{}
+func jsonDecode(b []byte) (*deprecatedSignedJws, error) {
+	jws := &deprecatedSignedJws{}
 	if err := json.Unmarshal(b, jws); err != nil {
 		return nil, err
 	}
 	return jws, nil
 }
 
-func (jws *signedJws) String() string {
+func (jws *deprecatedSignedJws) String() string {
 	if s, err := jws.CompactEncode(); err == nil {
 		return s
 	}
@@ -97,7 +97,7 @@ func (jws *signedJws) String() string {
 // protectedHeader is just a regular registered header with custom text marhsalling
 // to allow for url safe base64 encoding and decoding of the json object
 type protectedHeader struct {
-	values *registerdHeader
+	values *RegisterdJwsHeader
 }
 
 func (h *protectedHeader) MarshalText() ([]byte, error) {
@@ -125,7 +125,7 @@ func (h *protectedHeader) UnmarshalText(b []byte) error {
 		return err
 	}
 
-	h.values = &registerdHeader{}
+	h.values = &RegisterdJwsHeader{}
 	return json.Unmarshal(jBytes, h.values)
 }
 

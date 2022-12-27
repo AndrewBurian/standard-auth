@@ -7,12 +7,12 @@ import (
 
 var testProtectedHeaders = map[string]*protectedHeader{
 	"none": {
-		values: &registerdHeader{},
+		values: &RegisterdJwsHeader{},
 	},
 }
 
 func Test_signedJws_EncodeFlat(t *testing.T) {
-	j := &signedJws{
+	j := &deprecatedSignedJws{
 		SignedPayload: []byte("test"),
 		Signature:     []byte("signed, bob"),
 		Protected:     testProtectedHeaders["none"],
@@ -27,7 +27,7 @@ func Test_signedJws_EncodeFlat(t *testing.T) {
 }
 
 func Test_signedJws_EncodeGeneral(t *testing.T) {
-	j := &signedJws{
+	j := &deprecatedSignedJws{
 		SignedPayload: []byte("test"),
 		Signatures: []*jwsSignature{
 			{
@@ -46,7 +46,7 @@ func Test_signedJws_EncodeGeneral(t *testing.T) {
 }
 
 func Test_signedJws_String(t *testing.T) {
-	j := &signedJws{
+	j := &deprecatedSignedJws{
 		SignedPayload: []byte("test2"),
 		Protected:     testProtectedHeaders["none"],
 	}
@@ -64,7 +64,7 @@ func Test_protectedHeader_Bidirectional_Serialize(t *testing.T) {
 		{
 			name: "simple",
 			h: &protectedHeader{
-				values: &registerdHeader{
+				values: &RegisterdJwsHeader{
 					Algorithm: "none",
 				},
 			},

@@ -1,55 +1,49 @@
 package jws
 
-type JWS interface {
+type ValidatedJws interface {
 	JOSEHeader
-	Payload() []byte
-
-	JSONEncode() ([]byte, error)
-	CompactEncode() (string, error)
-	String() string
+	GetPayload() []byte
 }
 
-var _ JWS = &signedJws{}
+var _ ValidatedJws = &validJws{}
 
-type signedJws struct {
-	SignedPayload opaqueData       `json:"payload"`
-	Protected     *protectedHeader `json:"protected,omitempty"`
-	Unprotected   *registerdHeader `json:"header,omitempty"`
-	Signature     opaqueData       `json:"signature,omitempty"`
-	Signatures    []*jwsSignature  `json:"signatures,omitempty"`
+// type deprecatedSignedJws struct {
+// 	SignedPayload opaqueData          `json:"payload"`
+// 	Protected     *protectedHeader    `json:"protected,omitempty"`
+// 	Unprotected   *RegisterdJwsHeader `json:"header,omitempty"`
+// 	Signature     opaqueData          `json:"signature,omitempty"`
+// 	Signatures    []*jwsSignature     `json:"signatures,omitempty"`
 
-	// pointers to the validated data
-	validated *validatedJws `json:"-"`
+// 	// pointers to the validated data
+// 	validated *validJws `json:"-"`
+// }
+
+type validJws struct {
+	Payload     []byte
+	Protected   map[string]any
+	Unprotected map[string]any
 }
 
-type validatedJws struct {
-	Payload     *opaqueData
-	Protected   *registerdHeader
-	Unprotected *registerdHeader
-}
+// type jwsSignature struct {
+// 	Protected *protectedHeader    `json:"protected,omitempty"`
+// 	Header    *RegisterdJwsHeader `json:"header,omitempty"`
+// 	Signature opaqueData          `json:"signature"`
+// }
 
-type jwsSignature struct {
-	Protected *protectedHeader `json:"protected,omitempty"`
-	Header    *registerdHeader `json:"header,omitempty"`
-	Signature opaqueData       `json:"signature"`
-}
-
-func (jws *signedJws) ProtectedHeader() Header {
+func (jws *validJws) ProtectedHeader() Header {
 	return &jwsHeaderReader{
-		jws:       jws.validated,
+		jws:       jws,
 		protected: true,
 	}
 }
 
-func (jws *signedJws) UnprotectedHeader() Header {
+func (jws *validJws) UnprotectedHeader() Header {
 	return &jwsHeaderReader{
-		jws:       jws.validated,
+		jws:       jws,
 		protected: false,
 	}
 }
 
-func (jws *signedJws) Payload() []byte {
-	return []byte(jws.SignedPayload)
+func (jws *validJws) GetPayload() []byte {
+	return []byte(jws.Payload)
 }
-
-//TODO: io.ReaderWriter interface?
