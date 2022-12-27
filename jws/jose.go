@@ -15,14 +15,21 @@ type JOSEHeader interface {
 type Header interface {
 	Get(string) any
 
+	// Header "alg"
 	Algorithm() string
+	// Header "crit"
 	Critical() []string
 
+	// Header "typ"
 	Type() string
+	// Header "cty"
 	ContentType() string
 
+	// Header "jku"
 	JwkSetUrl() string
+	// Header "jwk"
 	Jwk() jwk.JWK
+	// Header "kid"
 	KeyId() string
 }
 
@@ -110,6 +117,7 @@ func validateKnownTypes(header map[string]any) error {
 		"cty":  stringType,
 		"jku":  stringType,
 		"jwk":  nestedObjectType,
+		"kid":  stringType,
 	}
 
 	for name, expectType := range expectedTypes {

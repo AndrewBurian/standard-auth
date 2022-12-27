@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 type UnverifiedJws interface {
@@ -28,19 +29,31 @@ type rawJws struct {
 //
 // Can parse dot-separated compact string encoding, or JSON
 func ParseJws(encodedJws []byte) (UnverifiedJws, error) {
-	// quick way to verify what encoding it is, does it have an
-	// opening '{', which must be present to be valid JSON, and
-	// cannot be present for compact encoding
+	return parseJwsAnyEncoding(encodedJws)
+}
+
+func parseJwsAnyEncoding(encodedJws []byte) (*signedJws, error) {
 	if len(encodedJws) == 0 {
 		return nil, errors.New("invalid jws: zero-length or nil data")
 	}
 
-	if encodedJws[0] == '{' {
-		return decodeJson(encodedJws)
+	// quick way to verify what encoding it is, does it have an
+	// opening '{', which must be present to be valid JSON, and
+	// cannot be present for compact encoding
+	for i := range encodedJws {
+		if unicode.IsSpace(rune(encodedJws[i])) {
+			continue
+		}
+		if encodedJws[i] == '{' {
+			return decodeJson(encodedJws)
+		}
+		if i > 0 {
+			return nil, errors.New("invalid input: leading whitespace for non JSON encoded jws")
+		}
+		return decodeCompact(encodedJws)
 	}
-
-	return decodeCompact(encodedJws)
-
+	// should never reach here
+	panic("jws parsing reached an unreachable state when choosing between serializations")
 }
 
 // First steps of
@@ -88,7 +101,7 @@ func decodeJson(data []byte) (*signedJws, error) {
 		strictDecoder.DisallowUnknownFields()
 		err := strictDecoder.Decode(raw)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("bad jws json encoding: %w", err)
 		}
 	}
 
@@ -107,7 +120,7 @@ func decodeJson(data []byte) (*signedJws, error) {
 		signed.Signatures = raw.Signatures
 	} else {
 		unflattenedSig := &signedJwsSignature{
-			Protected: raw.Payload,
+			Protected: raw.Protected,
 			Header:    raw.Header,
 			Signature: raw.Signature,
 		}
@@ -116,7 +129,7 @@ func decodeJson(data []byte) (*signedJws, error) {
 
 	// common validateion
 	if err := validateDecodedJws(signed); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("jws validation failed: %w", err)
 	}
 
 	return signed, nil
@@ -136,7 +149,7 @@ func validateDecodedJws(jws *signedJws) error {
 	payloadBytes := make([]byte, base64url.DecodedLen(len(jws.Payload)))
 	_, err := base64url.Decode(payloadBytes, []byte(jws.Payload))
 	if err != nil {
-		return fmt.Errorf("error validating jws: bad payload encoding: %w", err)
+		return fmt.Errorf("bad payload encoding: %w", err)
 	}
 
 	// We have to verify each signature
@@ -149,7 +162,7 @@ func validateDecodedJws(jws *signedJws) error {
 		protectedBytes := make([]byte, base64url.DecodedLen(len(sig.Protected)))
 		_, err := base64url.Decode(protectedBytes, []byte(sig.Protected))
 		if err != nil {
-			return fmt.Errorf("error validating JWS: bad protected header encoding in signature %d: %w", sigId, err)
+			return fmt.Errorf("bad protected header encoding in signature %d: %w", sigId, err)
 		}
 
 		jose := make(map[string]any)
@@ -157,14 +170,14 @@ func validateDecodedJws(jws *signedJws) error {
 		// unmarshal the bytes into a header struct
 		err = json.Unmarshal(protectedBytes, &jose)
 		if err != nil {
-			return fmt.Errorf("error validating JWS: bad JSON encoding for protected header in signature %d: %w", sigId, err)
+			return fmt.Errorf("bad JSON encoding for protected header in signature %d: %w", sigId, err)
 		}
 
 		// checking for duplicates in the jose header
 		// 5.2.4
 		for key := range sig.Header {
 			if _, set := jose[key]; set {
-				return fmt.Errorf("error validating JWS: JOSE header for signature %d contains duplicate member: %s", sigId, key)
+				return fmt.Errorf("JOSE header for signature %d contains duplicate member: %s", sigId, key)
 			}
 
 			// merge them together for later
@@ -176,14 +189,14 @@ func validateDecodedJws(jws *signedJws) error {
 		sigBytes := make([]byte, base64url.DecodedLen(len(sig.Signature)))
 		_, err = base64url.Decode(sigBytes, []byte(sig.Signature))
 		if err != nil {
-			return fmt.Errorf("error validating JWS: bad signature encoding in signature %d: %w", sigId, err)
+			return fmt.Errorf("bad signature encoding in signature %d: %w", sigId, err)
 		}
 
 		// an additional check for our own sanity
 		// make sure registered header types are what we expect them to be
 		err = validateKnownTypes(jose)
 		if err != nil {
-			return fmt.Errorf("error validating JWS: invalid registered header: %w", err)
+			return fmt.Errorf("invalid registered header: %w", err)
 		}
 	}
 

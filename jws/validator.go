@@ -116,12 +116,12 @@ func (ja *JWKValidator) Validate(unsafeJws UnverifiedJws) (ValidatedJws, error) 
 		}
 
 		// this authenitcator works on remote keys
-		// TODO: local keys?
-		if !headers.Has("jwu") {
+		jku := jws.ProtectedHeader().JwkSetUrl()
+		if jku == "" {
 			return nil, ErrNoKeyResolution
 		}
 
-		jkuUrl, err := url.Parse(headers.Get("jku"))
+		jkuUrl, err := url.Parse(jku)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse jku url: %w", err)
 		}
