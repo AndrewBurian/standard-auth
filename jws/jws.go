@@ -22,6 +22,7 @@ type validJws struct {
 	Payload     []byte
 	Protected   map[string]any
 	Unprotected map[string]any
+	Signature   []byte
 }
 
 // type jwsSignature struct {

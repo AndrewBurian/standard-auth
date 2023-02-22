@@ -7,11 +7,16 @@ import (
 	"testing"
 )
 
+func jsonEn(protected, header map[string]any, sig, payload []byte) (string, *unsafeJws) {
+
+}
+
 func Test_parseJwsAnyEncoding(t *testing.T) {
+
 	tests := []struct {
 		name      string
 		input     []byte
-		want      *signedJws
+		want      *unsafeJws
 		wantErr   bool
 		wantErrIs error
 	}{
@@ -19,13 +24,18 @@ func Test_parseJwsAnyEncoding(t *testing.T) {
 			// sample from RFC 7515 § 3.3: Example JWS.
 			name:  "valid compact",
 			input: []byte(`eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ.dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`),
-			want: &signedJws{
-				Payload: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
-				Signatures: []*signedJwsSignature{
+			want: &unsafeJws{
+				PayloadEncoded: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
+				Signatures: []*unsafeJwsSignature{
 					{
-						Protected: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
-						Header:    nil,
-						Signature: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
+						protectedHeader: map[string]any{
+							"iss":                        "joe",
+							"exp":                        1300819380,
+							"http://example.com/is_root": true,
+						},
+						ProtectedHeaderEncoded: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
+						UnprotectedHeader:      nil,
+						SignatureEncoded:       `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
 					},
 				},
 			},
@@ -39,13 +49,13 @@ func Test_parseJwsAnyEncoding(t *testing.T) {
 					"signature": "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
 				}
 			`),
-			want: &signedJws{
-				Payload: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
-				Signatures: []*signedJwsSignature{
+			want: &unsafeJws{
+				PayloadEncoded: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
+				Signatures: []*unsafeJwsSignature{
 					{
-						Protected: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
-						Header:    nil,
-						Signature: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
+						ProtectedHeaderEncoded: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
+						UnprotectedHeader:      nil,
+						SignatureEncoded:       `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
 					},
 				},
 			},
@@ -63,13 +73,13 @@ func Test_parseJwsAnyEncoding(t *testing.T) {
 					]
 				}
 			`),
-			want: &signedJws{
-				Payload: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
-				Signatures: []*signedJwsSignature{
+			want: &unsafeJws{
+				PayloadEncoded: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
+				Signatures: []*unsafeJwsSignature{
 					{
-						Protected: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
-						Header:    nil,
-						Signature: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
+						ProtectedHeaderEncoded: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
+						UnprotectedHeader:      nil,
+						SignatureEncoded:       `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
 					},
 				},
 			},
@@ -91,18 +101,18 @@ func Test_parseJwsAnyEncoding(t *testing.T) {
 					]
 				}
 			`),
-			want: &signedJws{
-				Payload: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
-				Signatures: []*signedJwsSignature{
+			want: &unsafeJws{
+				PayloadEncoded: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
+				Signatures: []*unsafeJwsSignature{
 					{
-						Protected: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
-						Header:    nil,
-						Signature: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
+						ProtectedHeaderEncoded: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
+						UnprotectedHeader:      nil,
+						SignatureEncoded:       `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
 					},
 					{
-						Protected: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
-						Header:    nil,
-						Signature: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
+						ProtectedHeaderEncoded: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
+						UnprotectedHeader:      nil,
+						SignatureEncoded:       `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
 					},
 				},
 			},
@@ -206,15 +216,15 @@ func Test_parseJwsAnyEncoding(t *testing.T) {
 					}
 				}
 			`),
-			want: &signedJws{
-				Payload: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
-				Signatures: []*signedJwsSignature{
+			want: &unsafeJws{
+				PayloadEncoded: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
+				Signatures: []*unsafeJwsSignature{
 					{
-						Protected: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
-						Header: map[string]any{
+						ProtectedHeaderEncoded: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
+						UnprotectedHeader: map[string]any{
 							"kid": "mykey",
 						},
-						Signature: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
+						SignatureEncoded: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
 					},
 				},
 			},
@@ -242,22 +252,22 @@ func Test_parseJwsAnyEncoding(t *testing.T) {
 					]
 				}
 			`),
-			want: &signedJws{
-				Payload: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
-				Signatures: []*signedJwsSignature{
+			want: &unsafeJws{
+				PayloadEncoded: `eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGFtcGxlLmNvbS9pc19yb290Ijp0cnVlfQ`,
+				Signatures: []*unsafeJwsSignature{
 					{
-						Protected: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
-						Header: map[string]any{
+						ProtectedHeaderEncoded: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
+						UnprotectedHeader: map[string]any{
 							"kid": "key1",
 						},
-						Signature: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
+						SignatureEncoded: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
 					},
 					{
-						Protected: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
-						Header: map[string]any{
+						ProtectedHeaderEncoded: `eyJ0eXAiOiJKV1QiLA0KICJhbGciOiJIUzI1NiJ9`,
+						UnprotectedHeader: map[string]any{
 							"kid": "key2",
 						},
-						Signature: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
+						SignatureEncoded: `dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk`,
 					},
 				},
 			},
@@ -311,14 +321,14 @@ func Test_parseJwsAnyEncoding(t *testing.T) {
 	}
 }
 
-func compareJws(have, want *signedJws) error {
+func compareJws(have, want *unsafeJws) error {
 	if have == nil {
 		return fmt.Errorf("jws is nil")
 	}
 
-	if want.Payload != have.Payload {
+	if want.PayloadEncoded != have.PayloadEncoded {
 		return fmt.Errorf("payload mismatch\n\twant: %s\n\thave: %s",
-			want.Payload, have.Payload)
+			want.PayloadEncoded, have.PayloadEncoded)
 	}
 
 	if len(want.Signatures) != len(have.Signatures) {
@@ -327,22 +337,22 @@ func compareJws(have, want *signedJws) error {
 	}
 
 	for i := range want.Signatures {
-		if want.Signatures[i].Protected != have.Signatures[i].Protected {
+		if want.Signatures[i].ProtectedHeaderEncoded != have.Signatures[i].ProtectedHeaderEncoded {
 			return fmt.Errorf("protected header mismatch in signature %d:\n\twant: %s\n\thave: %s", i,
-				want.Signatures[i].Protected,
-				have.Signatures[i].Protected)
+				want.Signatures[i].ProtectedHeaderEncoded,
+				have.Signatures[i].ProtectedHeaderEncoded)
 		}
 
-		if want.Signatures[i].Signature != have.Signatures[i].Signature {
+		if want.Signatures[i].SignatureEncoded != have.Signatures[i].SignatureEncoded {
 			return fmt.Errorf("signature bytes mismatch in signature %d:\n\twant: %s\n\thave: %s", i,
-				want.Signatures[i].Signature,
-				have.Signatures[i].Signature)
+				want.Signatures[i].SignatureEncoded,
+				have.Signatures[i].SignatureEncoded)
 		}
 
-		if !reflect.DeepEqual(want.Signatures[i].Header, have.Signatures[i].Header) {
+		if !reflect.DeepEqual(want.Signatures[i].UnprotectedHeader, have.Signatures[i].UnprotectedHeader) {
 			return fmt.Errorf("unprotected header mismatch in signature %d:\n\twant: %v\n\thave: %v", i,
-				want.Signatures[i].Header,
-				have.Signatures[i].Header)
+				want.Signatures[i].UnprotectedHeader,
+				have.Signatures[i].UnprotectedHeader)
 		}
 	}
 

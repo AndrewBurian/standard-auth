@@ -14,18 +14,42 @@ var (
 )
 
 type UnverifiedJws interface {
-	GetSignatures() []*signedJwsSignature
+	GetSignatures() []*unsafeJwsSignature
 	GetPayload() []byte
 }
 
 // rawJws is essentially the same as a signedJws, but has both
 // the flattened and general encoding fields available for decoding
 type rawJws struct {
-	Payload    string                `json:"payload"`
-	Protected  string                `json:"protected"`
-	Signature  string                `json:"signature"`
-	Header     map[string]any        `json:"header"`
-	Signatures []*signedJwsSignature `json:"signatures"`
+	PayloadEncoded   string             `json:"payload"`
+	Signatures       []*rawJwsSignature `json:"signatures"`
+	*rawJwsSignature                    // anonymous signature at the root for flattened
+}
+
+type rawJwsSignature struct {
+	ProtectedHeaderEncoded string         `json:"protected,omitempty"`
+	UnprotectedHeader      map[string]any `json:"header,omitempty"`
+	SignatureEncoded       string         `json:"signature"`
+}
+
+type unsafeJws struct {
+	payloadBytes []byte
+	signatures   []*unsafeJwsSignature
+}
+
+type unsafeJwsSignature struct {
+	unprotectedHeader map[string]any
+	protectedHeader   map[string]any
+	signatureBytes    []byte
+	signingInput      []byte
+}
+
+func (uj *unsafeJws) GetPayload() []byte {
+	return uj.payloadBytes
+}
+
+func (uj *unsafeJws) GetSignatures() []*unsafeJwsSignature {
+	return uj.signatures
 }
 
 // ParseJws takes a JWS in any valid encoding, and returns a
@@ -36,7 +60,7 @@ func ParseJws(encodedJws []byte) (UnverifiedJws, error) {
 	return parseJwsAnyEncoding(encodedJws)
 }
 
-func parseJwsAnyEncoding(encodedJws []byte) (*signedJws, error) {
+func parseJwsAnyEncoding(encodedJws []byte) (*unsafeJws, error) {
 	if len(encodedJws) == 0 {
 		return nil, errors.New("invalid jws: zero-length or nil data")
 	}
@@ -63,7 +87,7 @@ func parseJwsAnyEncoding(encodedJws []byte) (*signedJws, error) {
 // First steps of
 // RFC 7515 § 5.2: Message Signature or MAC Validation.
 // 5.2.1 parse and verify compact
-func decodeCompact(data []byte) (*signedJws, error) {
+func decodeCompact(data []byte) (*unsafeJws, error) {
 	// we can treat the compact encoding as a string for simplicity
 	compactString := string(data)
 
@@ -73,29 +97,30 @@ func decodeCompact(data []byte) (*signedJws, error) {
 	}
 
 	// unpack it to General signed encoding to make things simpler
-	signed := &signedJws{
-		Payload: parts[1],
-		Signatures: []*signedJwsSignature{
+	raw := &rawJws{
+		PayloadEncoded: parts[1],
+		Signatures: []*rawJwsSignature{
 			{
-				Protected: parts[0],
-				Signature: parts[2],
+				ProtectedHeaderEncoded: parts[0],
+				SignatureEncoded:       parts[2],
 			},
 		},
 	}
 
 	// common validateion
-	if err := validateDecodedJws(signed); err != nil {
+	unsafe, err := decodedRawJws(raw)
+	if err != nil {
 		return nil, err
 	}
 
-	return signed, nil
+	return unsafe, nil
 
 }
 
 // First steps of
 // RFC 7515 § 5.2: Message Signature or MAC Validation.
 // 5.2.1 parse and verify JSON flattened and general
-func decodeJson(data []byte) (*signedJws, error) {
+func decodeJson(data []byte) (*unsafeJws, error) {
 	raw := &rawJws{}
 
 	{
@@ -109,36 +134,26 @@ func decodeJson(data []byte) (*signedJws, error) {
 		}
 	}
 
-	// restructure it into a signedJws
-	signed := &signedJws{
-		Payload: raw.Payload,
-	}
-
 	// unpack either a general serialization, verifying we don't have
 	// duplicate fields, or a flattened serialization into a general
 	// structure
-	if len(raw.Signatures) > 0 {
-		if raw.Protected != "" || len(raw.Header) != 0 || raw.Signature != "" {
-			return nil, errors.New("bad general encoding: has flattened and general members")
-		}
-		signed.Signatures = raw.Signatures
-	} else {
-		unflattenedSig := &signedJwsSignature{
-			Protected: raw.Protected,
-			Header:    raw.Header,
-			Signature: raw.Signature,
-		}
-		signed.Signatures = append(signed.Signatures, unflattenedSig)
+	if len(raw.Signatures) > 0 || raw.rawJwsSignature != nil {
+		return nil, errors.New("bad general encoding: has flattened and general members")
+	}
+	if raw.rawJwsSignature != nil {
+		raw.Signatures = append(raw.Signatures, raw.rawJwsSignature)
 	}
 
 	// common validateion
-	if err := validateDecodedJws(signed); err != nil {
-		return nil, fmt.Errorf("jws validation failed: %w", err)
+	decoded, err := decodedRawJws(raw)
+	if err != nil {
+		return nil, fmt.Errorf("jws decoding failed: %w", err)
 	}
 
-	return signed, nil
+	return decoded, nil
 }
 
+// Decodes a raw JWs
 // Performs some of the validation required in
 // RFC 7515 § 5.2: Message Signature or MAC Validation.
 // 5.2.2
@@ -146,65 +161,75 @@ func decodeJson(data []byte) (*signedJws, error) {
 // 5.2.4
 // 5.2.6
 // 5.2.7
-func validateDecodedJws(jws *signedJws) error {
+// output is still untrusted since we don't yet verify
+// the actual signature
+func decodedRawJws(jws *rawJws) (*unsafeJws, error) {
+
+	decoded := new(unsafeJws)
+	var err error
 
 	// verify the Payload is a valid base64 object
 	// 5.2.6
-	payloadBytes := make([]byte, base64url.DecodedLen(len(jws.Payload)))
-	_, err := base64url.Decode(payloadBytes, []byte(jws.Payload))
+	decoded.payloadBytes = make([]byte, base64url.DecodedLen(len(jws.PayloadEncoded)))
+	_, err = base64url.Decode(decoded.payloadBytes, []byte(jws.PayloadEncoded))
 	if err != nil {
-		return fmt.Errorf("bad payload encoding: %w", err)
+		return nil, fmt.Errorf("bad payload encoding: %w", err)
 	}
 
 	// We have to verify each signature
 	for sigId, sig := range jws.Signatures {
 
+		nextSig := new(unsafeJwsSignature)
+
 		// ensure the protected header is a valid
 		// base64 encoded JSON object
 		// 5.2.2 & 5.2.3
 		// TODO: need to validate requirements of 5.2.2 with more rigour
-		protectedBytes := make([]byte, base64url.DecodedLen(len(sig.Protected)))
-		_, err := base64url.Decode(protectedBytes, []byte(sig.Protected))
+		protectedBytes := make([]byte, base64url.DecodedLen(len(sig.ProtectedHeaderEncoded)))
+		_, err := base64url.Decode(protectedBytes, []byte(sig.ProtectedHeaderEncoded))
 		if err != nil {
-			return fmt.Errorf("bad protected header encoding in signature %d: %w", sigId, err)
+			return nil, fmt.Errorf("bad protected header encoding in signature %d: %w", sigId, err)
 		}
 
-		jose := make(map[string]any)
+		nextSig.protectedHeader = make(map[string]any)
 
 		// unmarshal the bytes into a header struct
-		err = json.Unmarshal(protectedBytes, &jose)
+		err = json.Unmarshal(protectedBytes, nextSig)
 		if err != nil {
-			return fmt.Errorf("bad JSON encoding for protected header in signature %d: %w", sigId, err)
+			return nil, fmt.Errorf("bad JSON encoding for protected header in signature %d: %w", sigId, err)
 		}
+
+		nextSig.unprotectedHeader = sig.UnprotectedHeader
 
 		// checking for duplicates in the jose header
 		// 5.2.4
-		for key := range sig.Header {
-			if _, set := jose[key]; set {
-				return fmt.Errorf("JOSE header for signature %d contains duplicate member: %s", sigId, key)
+		for key := range nextSig.unprotectedHeader {
+			if _, set := nextSig.protectedHeader[key]; set {
+				return nil, fmt.Errorf("JOSE header for signature %d contains duplicate member: %s", sigId, key)
 			}
-
-			// merge them together for later
-			jose[key] = sig.Header[key]
 		}
 
 		// ensure the signature is valid base64 encoded bytes
 		// 5.2.7
-		sigBytes := make([]byte, base64url.DecodedLen(len(sig.Signature)))
-		_, err = base64url.Decode(sigBytes, []byte(sig.Signature))
+		nextSig.signatureBytes = make([]byte, base64url.DecodedLen(len(sig.SignatureEncoded)))
+		_, err = base64url.Decode(nextSig.signatureBytes, []byte(sig.SignatureEncoded))
 		if err != nil {
-			return fmt.Errorf("bad signature encoding in signature %d: %w", sigId, err)
+			return nil, fmt.Errorf("bad signature encoding in signature %d: %w", sigId, err)
 		}
 
 		// an additional check for our own sanity
 		// make sure registered header types are what we expect them to be
-		err = validateKnownTypes(jose)
+		err = validateKnownTypes(nextSig.protectedHeader)
 		if err != nil {
-			return fmt.Errorf("invalid registered header: %w", err)
+			return nil, fmt.Errorf("invalid registered header in protected headers in signature %d: %w", sigId, err)
+		}
+		err = validateKnownTypes(nextSig.unprotectedHeader)
+		if err != nil {
+			return nil, fmt.Errorf("invalid registered header in unprotected headers in signature %d: %w", sigId, err)
 		}
 	}
 
 	// all checks pass
-	return nil
+	return decoded, nil
 
 }
